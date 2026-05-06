@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.idea/
+.pytest_cache/
+build/
+dist/
+release/
+*.spec
+.env
+.env.*
+*.log
+config.json
+config.json.tmp
+config.json.broken
