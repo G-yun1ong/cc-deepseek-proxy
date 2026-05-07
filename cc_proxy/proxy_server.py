@@ -6,6 +6,7 @@ from typing import Any
 
 import requests
 from flask import Flask, Response, request
+from werkzeug.exceptions import HTTPException
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 from .config_store import ConfigStore
@@ -54,6 +55,26 @@ def _sanitize_payload(data: dict[str, Any]) -> None:
 def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
     app = Flask(__name__)
 
+    @app.errorhandler(HTTPException)
+    def handle_http_error(exc: HTTPException) -> tuple[dict[str, Any], int]:
+        status_code = exc.code or 500
+        if status_code == 404:
+            error_type = "not_found"
+            log_bus.emit(f"请求路径不存在：{request.method} {request.path}", "WARN")
+        else:
+            error_type = "http_error"
+            log_bus.emit(f"HTTP 错误：{status_code} {request.method} {request.path} - {exc.description}", "WARN")
+        return (
+            _error_payload(
+                error_type,
+                str(exc.description),
+                status_code=status_code,
+                method=request.method,
+                path=request.path,
+            ),
+            status_code,
+        )
+
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc: Exception) -> tuple[dict[str, Any], int]:
         log_bus.emit(f"未处理异常：{exc}", "ERROR")
@@ -73,6 +94,25 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
     @app.get("/health")
     def health() -> tuple[dict[str, Any], int]:
         return {"ok": True, "service": "cc-deepseek-proxy"}, 200
+
+    @app.get("/v1/models")
+    def models() -> tuple[dict[str, Any], int]:
+        config = config_store.get()
+        model_ids = list((config.get("model_mapping") or {}).keys())
+        if not model_ids:
+            model_ids = list((config.get("model_mapping") or {}).values())
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "id": model_id,
+                    "object": "model",
+                    "created": 0,
+                    "owned_by": "cc-deepseek-proxy",
+                }
+                for model_id in model_ids
+            ],
+        }, 200
 
     @app.post("/v1/messages/count_tokens")
     def count_tokens() -> tuple[dict[str, int], int]:

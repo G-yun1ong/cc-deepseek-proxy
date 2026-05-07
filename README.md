@@ -8,6 +8,7 @@
 - 兼容 Claude Code 常用的 Anthropic 消息接口：
   - `POST /v1/messages`
   - `POST /v1/messages/count_tokens`
+  - `GET /v1/models`
 - 支持流式转发目标服务商响应，保留上游返回的 `Content-Type`。
 - 支持按配置把 Claude Code 请求模型映射到目标服务商模型。
 - 未命中模型映射时，会优先使用配置中的第一个目标模型作为兜底。

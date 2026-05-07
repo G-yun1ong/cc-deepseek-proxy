@@ -569,13 +569,13 @@ class ProxyGui:
         mapping_buttons.columnconfigure(0, weight=1, uniform="mapping_buttons")
         mapping_buttons.columnconfigure(1, weight=1, uniform="mapping_buttons")
         mapping_buttons.columnconfigure(2, weight=1, uniform="mapping_buttons")
-        RoundedButton(mapping_buttons, "新增/更新", self._upsert_mapping, width=120, primary=True).grid(
+        RoundedButton(mapping_buttons, "删除选中", self._delete_mapping, width=120).grid(
             row=0, column=0, sticky="ew", padx=(0, 8)
         )
-        RoundedButton(mapping_buttons, "删除选中", self._delete_mapping, width=120).grid(
+        RoundedButton(mapping_buttons, "清空输入", self._clear_mapping_inputs, width=120).grid(
             row=0, column=1, sticky="ew", padx=(4, 4)
         )
-        RoundedButton(mapping_buttons, "清空输入", self._clear_mapping_inputs, width=120).grid(
+        RoundedButton(mapping_buttons, "新增/更新", self._upsert_mapping, width=120, primary=True).grid(
             row=0, column=2, sticky="ew", padx=(8, 0)
         )
         frame.columnconfigure(0, weight=1)
