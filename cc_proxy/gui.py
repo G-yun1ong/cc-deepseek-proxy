@@ -422,7 +422,7 @@ class ProxyGui:
 
         actions = tk.Frame(header, bg=PALETTE["light"], highlightthickness=0)
         actions.grid(row=0, column=1, rowspan=2, sticky="e")
-        for column in range(4):
+        for column in range(3):
             actions.columnconfigure(column, weight=0)
 
         tk.Label(
@@ -433,13 +433,10 @@ class ProxyGui:
             font=_ui_font("未启动", 10, "bold"),
             anchor="e",
         ).grid(row=0, column=0, sticky="e", padx=(0, 12))
-        RoundedButton(actions, "保存", self._save_config_from_ui, width=78, surface=PALETTE["light"]).grid(
+        RoundedButton(actions, "启动", self._start_proxy, width=78, primary=True, surface=PALETTE["light"]).grid(
             row=0, column=1, padx=(0, 8)
         )
-        RoundedButton(actions, "启动", self._start_proxy, width=78, primary=True, surface=PALETTE["light"]).grid(
-            row=0, column=2, padx=(0, 8)
-        )
-        RoundedButton(actions, "停止", self._stop_proxy, width=78, surface=PALETTE["light"]).grid(row=0, column=3)
+        RoundedButton(actions, "停止", self._stop_proxy, width=78, surface=PALETTE["light"]).grid(row=0, column=2)
 
     def _add_vertical_entry(
         self,
@@ -491,32 +488,39 @@ class ProxyGui:
             if key == "api_key":
                 self.api_key_entry = entry
 
+        config_actions = tk.Frame(frame, bg=PALETTE["pampas"], highlightthickness=0)
+        config_actions.grid(row=10, column=0, columnspan=2, sticky="ew")
+        config_actions.columnconfigure(0, weight=1)
+        config_actions.columnconfigure(1, weight=0)
         self.show_key_var = tk.BooleanVar(value=False)
         show_key = ttk.Checkbutton(
-            frame,
+            config_actions,
             text="显示 API Key",
             variable=self.show_key_var,
             command=self._toggle_api_key,
         )
-        show_key.grid(row=10, column=0, columnspan=2, sticky="w")
+        show_key.grid(row=0, column=0, sticky="w")
+        RoundedButton(config_actions, "保存配置", self._save_config_from_ui, width=104, primary=True).grid(
+            row=0, column=1, sticky="e"
+        )
 
     def _build_mapping_frame(self, parent: ttk.Frame, row: int) -> None:
         panel = RoundedPanel(parent, "模型映射")
         panel.grid(row=row, column=0, sticky="nsew", pady=(12, 0))
         frame = panel.content
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1, minsize=154)
 
         table_frame = tk.Frame(frame, bg=PALETTE["pampas"], highlightthickness=0)
         table_frame.grid(row=0, column=0, sticky="nsew")
         table_frame.columnconfigure(0, weight=1)
-        table_frame.rowconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1, minsize=142)
 
         self.mapping_tree = ttk.Treeview(
             table_frame,
             columns=("source", "target"),
             show="headings",
-            height=4,
+            height=5,
             selectmode="browse",
         )
         self.mapping_tree.heading("source", text="请求模型")
@@ -537,36 +541,42 @@ class ProxyGui:
 
         self.source_model_var = tk.StringVar()
         self.target_model_var = tk.StringVar()
+        inputs = tk.Frame(frame, bg=PALETTE["pampas"], highlightthickness=0)
+        inputs.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        inputs.columnconfigure(0, weight=1, uniform="mapping_inputs")
+        inputs.columnconfigure(1, weight=1, uniform="mapping_inputs")
         tk.Label(
-            frame,
+            inputs,
             text="请求模型",
             bg=PALETTE["pampas"],
             fg=PALETTE["cloudy"],
             font=_ui_font("请求模型", 10),
             anchor="w",
-        ).grid(row=1, column=0, sticky="ew", pady=(10, 4))
-        RoundedEntry(frame, self.source_model_var).grid(row=2, column=0, sticky="ew")
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 4))
         tk.Label(
-            frame,
+            inputs,
             text="转发目标模型",
             bg=PALETTE["pampas"],
             fg=PALETTE["cloudy"],
             font=_ui_font("转发目标模型", 10),
             anchor="w",
-        ).grid(row=3, column=0, sticky="ew", pady=(10, 4))
-        RoundedEntry(frame, self.target_model_var).grid(row=4, column=0, sticky="ew")
+        ).grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=(0, 4))
+        RoundedEntry(inputs, self.source_model_var).grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        RoundedEntry(inputs, self.target_model_var).grid(row=1, column=1, sticky="ew", padx=(8, 0))
 
         mapping_buttons = tk.Frame(frame, bg=PALETTE["pampas"], highlightthickness=0)
-        mapping_buttons.grid(row=5, column=0, sticky="ew", pady=(12, 0))
-        mapping_buttons.columnconfigure(0, weight=1)
+        mapping_buttons.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        mapping_buttons.columnconfigure(0, weight=1, uniform="mapping_buttons")
+        mapping_buttons.columnconfigure(1, weight=1, uniform="mapping_buttons")
+        mapping_buttons.columnconfigure(2, weight=1, uniform="mapping_buttons")
         RoundedButton(mapping_buttons, "新增/更新", self._upsert_mapping, width=120, primary=True).grid(
-            row=0, column=0, sticky="ew", pady=(0, 8)
+            row=0, column=0, sticky="ew", padx=(0, 8)
         )
         RoundedButton(mapping_buttons, "删除选中", self._delete_mapping, width=120).grid(
-            row=1, column=0, sticky="ew", pady=(0, 8)
+            row=0, column=1, sticky="ew", padx=(4, 4)
         )
         RoundedButton(mapping_buttons, "清空输入", self._clear_mapping_inputs, width=120).grid(
-            row=2, column=0, sticky="ew"
+            row=0, column=2, sticky="ew", padx=(8, 0)
         )
         frame.columnconfigure(0, weight=1)
 
