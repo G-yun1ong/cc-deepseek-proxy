@@ -4,6 +4,15 @@ import queue
 from datetime import datetime
 
 
+LEVEL_EMOJI = {
+    "INFO": "🟢",
+    "WARN": "🟡",
+    "WARNING": "🟡",
+    "ERROR": "🔴",
+    "DEBUG": "🔵",
+}
+
+
 class LogBus:
     """Small in-memory log queue.
 
@@ -16,8 +25,10 @@ class LogBus:
         self.echo = echo
 
     def emit(self, message: str, level: str = "INFO") -> None:
+        level = level.upper()
         timestamp = datetime.now().strftime("%H:%M:%S")
-        line = f"[{timestamp}] [{level}] {message}"
+        emoji = LEVEL_EMOJI.get(level, "⚪")
+        line = f"{emoji} [{timestamp}] [{level}] {message}"
         self._queue.put(line)
         if self.echo:
             try:
