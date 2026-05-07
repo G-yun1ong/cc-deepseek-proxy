@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import traceback
+from time import perf_counter
 from typing import Any
 
 import requests
@@ -141,7 +142,11 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
 
             provider = config.get("provider_name") or "provider"
             target = _target_url(config)
-            log_bus.emit(f"路由匹配：{requested_model} -> {target_model}，转发到 {provider}")
+            local_route = f"{request.method} {request.path}"
+            log_bus.emit(
+                f"转发接口：本地 {local_route} -> 上游 {target}，"
+                f"模型 {requested_model} -> {target_model}，服务商 {provider}"
+            )
 
             headers = {
                 "x-api-key": api_key,
@@ -152,6 +157,7 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
             if config.get("anthropic_version"):
                 headers["anthropic-version"] = str(config["anthropic_version"])
 
+            started_at = perf_counter()
             try:
                 response = requests.post(
                     target,
@@ -161,15 +167,22 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
                     timeout=(10, int(config.get("request_timeout_seconds", 120))),
                 )
             except requests.Timeout as exc:
-                log_bus.emit(f"{provider} 请求超时：{exc}", "ERROR")
+                elapsed_ms = int((perf_counter() - started_at) * 1000)
+                log_bus.emit(f"{provider} 请求超时：{target}，耗时 {elapsed_ms}ms，错误：{exc}", "ERROR")
                 return _error_payload("timeout_error", f"{provider} request timed out"), 504
             except requests.RequestException as exc:
-                log_bus.emit(f"{provider} 请求失败：{exc}", "ERROR")
+                elapsed_ms = int((perf_counter() - started_at) * 1000)
+                log_bus.emit(f"{provider} 请求失败：{target}，耗时 {elapsed_ms}ms，错误：{exc}", "ERROR")
                 return _error_payload("bad_gateway", f"{provider} request failed: {exc}"), 502
 
+            elapsed_ms = int((perf_counter() - started_at) * 1000)
             if response.status_code != 200:
                 body = _clip_text(response.text)
-                log_bus.emit(f"{provider} 返回错误：{response.status_code} - {body}", "ERROR")
+                log_bus.emit(
+                    f"{provider} 返回错误：HTTP {response.status_code}，上游 {target}，"
+                    f"耗时 {elapsed_ms}ms，响应：{body}",
+                    "ERROR",
+                )
                 return (
                     _error_payload(
                         "provider_error",
@@ -180,6 +193,8 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
                     ),
                     response.status_code,
                 )
+
+            log_bus.emit(f"{provider} 响应成功：HTTP 200，上游 {target}，耗时 {elapsed_ms}ms")
 
             def generate():
                 try:
