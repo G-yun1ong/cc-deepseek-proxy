@@ -25,6 +25,12 @@ def _clip_text(text: str, max_length: int = 600) -> str:
     return text[:max_length] + "...[truncated]"
 
 
+def _error_payload(error_type: str, message: str, **extra: Any) -> dict[str, Any]:
+    error: dict[str, Any] = {"type": error_type, "message": message}
+    error.update(extra)
+    return {"type": "error", "error": error}
+
+
 def _target_url(config: dict[str, Any]) -> str:
     return config["base_url"].rstrip("/") + "/" + config["messages_path"].lstrip("/")
 
@@ -47,6 +53,12 @@ def _sanitize_payload(data: dict[str, Any]) -> None:
 
 def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
     app = Flask(__name__)
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(exc: Exception) -> tuple[dict[str, Any], int]:
+        log_bus.emit(f"未处理异常：{exc}", "ERROR")
+        log_bus.emit(_clip_text(traceback.format_exc()), "ERROR")
+        return _error_payload("internal_error", str(exc)), 500
 
     @app.get("/")
     def index() -> tuple[dict[str, Any], int]:
@@ -73,13 +85,13 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
         try:
             data = request.get_json(silent=True)
             if not isinstance(data, dict):
-                return {"error": "No JSON data received"}, 400
+                return _error_payload("invalid_request_error", "No JSON data received"), 400
 
             config = config_store.runtime_snapshot()
             api_key = config.get("api_key", "")
             if not api_key:
                 log_bus.emit("请求被拒绝：config.json 中未配置 api_key", "ERROR")
-                return {"error": "Missing api_key in config.json"}, 400
+                return _error_payload("authentication_error", "Missing api_key in config.json"), 400
 
             _sanitize_payload(data)
             requested_model = str(data.get("model") or "claude-4.6-opus")
@@ -92,24 +104,42 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
             log_bus.emit(f"路由匹配：{requested_model} -> {target_model}，转发到 {provider}")
 
             headers = {
+                "x-api-key": api_key,
                 "Authorization": f"Bearer {api_key}",
+                "Accept": "application/json, text/event-stream",
                 "Content-Type": "application/json",
             }
             if config.get("anthropic_version"):
                 headers["anthropic-version"] = str(config["anthropic_version"])
 
-            response = requests.post(
-                target,
-                json=data,
-                headers=headers,
-                stream=True,
-                timeout=(10, int(config.get("request_timeout_seconds", 120))),
-            )
+            try:
+                response = requests.post(
+                    target,
+                    json=data,
+                    headers=headers,
+                    stream=True,
+                    timeout=(10, int(config.get("request_timeout_seconds", 120))),
+                )
+            except requests.Timeout as exc:
+                log_bus.emit(f"{provider} 请求超时：{exc}", "ERROR")
+                return _error_payload("timeout_error", f"{provider} request timed out"), 504
+            except requests.RequestException as exc:
+                log_bus.emit(f"{provider} 请求失败：{exc}", "ERROR")
+                return _error_payload("bad_gateway", f"{provider} request failed: {exc}"), 502
 
             if response.status_code != 200:
                 body = _clip_text(response.text)
                 log_bus.emit(f"{provider} 返回错误：{response.status_code} - {body}", "ERROR")
-                return response.text, response.status_code
+                return (
+                    _error_payload(
+                        "provider_error",
+                        f"{provider} returned HTTP {response.status_code}",
+                        provider=provider,
+                        provider_status=response.status_code,
+                        provider_body=body,
+                    ),
+                    response.status_code,
+                )
 
             def generate():
                 try:
@@ -127,7 +157,7 @@ def create_app(config_store: ConfigStore, log_bus: LogBus) -> Flask:
         except Exception as exc:
             log_bus.emit(f"代理内部错误：{exc}", "ERROR")
             log_bus.emit(_clip_text(traceback.format_exc()), "ERROR")
-            return {"error": str(exc)}, 500
+            return _error_payload("internal_error", str(exc)), 500
 
     return app
 
